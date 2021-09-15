@@ -1,14 +1,18 @@
 import { FtxFeeder, Tick, TradeSide } from "./feeder/FtxFeeder";
 
 interface CompareTick extends Tick {
-  average: number;
+  // average: number;
   tradeSide: TradeSide;
   tradeSpread: number;
+  tradeMaxSpread: number;
+  tradeMinSpread: number;
   tradeSize: number;
   tradePercentage: number;
+  tradeMaxPercentage: number;
+  tradeMinPercentage: number;
 }
 interface BaseTick extends Tick {
-  average: number;
+  // average: number;
   compareArray: Map<string, CompareTick>;
 }
 
@@ -34,54 +38,106 @@ ftxFeeder.on('ready', () => {
 ftxFeeder.on('tick', (tick: Tick) => {
   // console.log(`-----------------${tick.market}--------------------------`);
   // console.log(tick);
-  let tickAveragePrice = (tick.ask + tick.bid) / 2;
+  // let tickAveragePrice = (tick.ask + tick.bid) / 2;
   // console.log(`Average: ${tickAveragePrice}`);
 
   let baseTick: BaseTick = {
     ...tick,
-    average: tickAveragePrice,
+    // average: tickAveragePrice,
     compareArray: new Map<string, CompareTick>()
   };
 
-  lastTick.forEach((data, market) => {
-    if (tick.symbol === data.symbol && tick.market !== data.market) {
+  lastTick.forEach((current: BaseTick, market: string) => {
+    if (tick.symbol === current.symbol && tick.market !== current.market) {
       // console.log(data);
-      let averagePrice = (data.ask + data.bid) / 2;
+      // let averagePrice = (data.ask + data.bid) / 2;
       // console.log(`Average: ${averagePrice}`);
 
       let compareTick: CompareTick = {
-        ...data,
-        average: averagePrice,
+        symbol: current.symbol,
+        market: current.market,
+        bid: current.bid,
+        ask: current.ask,
+        bidSize: current.bidSize,
+        askSize: current.askSize,
+        time: current.time,
         tradeSide: TradeSide.buy,
         tradeSpread: 0,
+        tradeMaxSpread: 0,
+        tradeMinSpread: Infinity,
         tradeSize: 0,
-        tradePercentage: 0
+        tradePercentage: 0,
+        tradeMaxPercentage: 0,
+        tradeMinPercentage: Infinity,
       };
 
-      if (tickAveragePrice > averagePrice) { // Need to short
-        let sellSpread = Math.abs(tick.bid - data.ask);
-        let sellSize = Math.min(tick.bidSize, data.askSize);
-        let sellPercentage = parseFloat(((sellSpread / data.ask) * 100).toFixed(2));
+      if (current.compareArray.has(tick.market)) {
+        let currentMarket: CompareTick = current.compareArray.get(tick.market)!;
+        compareTick.tradeMaxSpread = currentMarket.tradeMaxSpread;
+        compareTick.tradeMinSpread = currentMarket.tradeMinSpread;
+        compareTick.tradeMaxPercentage = currentMarket.tradeMaxPercentage;
+        compareTick.tradeMinPercentage = currentMarket.tradeMinPercentage;
+      }
+
+      if (tick.bid > current.ask) { // Need to short
+        let sellSpread = Math.abs(tick.bid - current.ask);
+        let sellSize = Math.min(tick.bidSize, current.askSize);
+        let sellPercentage = parseFloat(((sellSpread / current.ask) * 100).toFixed(2));
+        compareTick.tradeSide = TradeSide.sell;
         compareTick.tradeSpread = sellSpread;
         compareTick.tradeSize = sellSize;
         compareTick.tradePercentage = sellPercentage;
-        // console.log(`Sell Spread: ${sellSpread}, Size ${sellSize} (${sellPercentage}%)`);
-      }
-      if (tickAveragePrice < averagePrice) { // Need to long
-        let buySpread = Math.abs(tick.ask - data.bid);
-        let buySize = Math.min(tick.askSize, data.bidSize);
-        let buyPercentage = parseFloat(((buySpread / data.bid) * 100).toFixed(2));
-        // console.log(`Buy Spread: ${buySpread}, Size ${buySize} (${buyPercentage}%)`);
+        if (sellSpread > compareTick.tradeMaxSpread) {
+          compareTick.tradeMaxSpread = sellSpread;
+        }
+        if (sellSpread < compareTick.tradeMinSpread) {
+          compareTick.tradeMinSpread = sellSpread;
+        }
+        if (sellPercentage > compareTick.tradeMaxPercentage) {
+          compareTick.tradeMaxPercentage = sellPercentage;
+        }
+        if (sellPercentage < compareTick.tradeMinPercentage) {
+          compareTick.tradeMinPercentage = sellPercentage;
+        }
+      } else if (current.bid > tick.ask) { // Need to long
+        let buySpread = Math.abs(tick.ask - current.bid);
+        let buySize = Math.min(tick.askSize, current.bidSize);
+        let buyPercentage = parseFloat(((buySpread / current.bid) * 100).toFixed(2));
+        compareTick.tradeSide = TradeSide.buy;
+        compareTick.tradeSpread = buySpread;
+        compareTick.tradeSize = buySize;
+        compareTick.tradePercentage = buyPercentage;
+        if (buySpread > compareTick.tradeMaxSpread) {
+          compareTick.tradeMaxSpread = buySpread;
+        }
+        if (buySpread < compareTick.tradeMinSpread) {
+          compareTick.tradeMinSpread = buySpread;
+        }
+        if (buyPercentage > compareTick.tradeMaxPercentage) {
+          compareTick.tradeMaxPercentage = buyPercentage;
+        }
+        if (buyPercentage < compareTick.tradeMinPercentage) {
+          compareTick.tradeMinPercentage = buyPercentage;
+        }
       }
 
-      baseTick.compareArray.set(data.market, compareTick);
+      baseTick.compareArray.set(current.market, compareTick);
 
     }
   });
   lastTick.set(tick.market, baseTick);
   // console.log(lastTick);
+  let tempTable = new Map<string, string>();
   lastTick.forEach((data, market) => {
-    console.log(data);
+    // console.log(data);
+    let temp = '';
+    data.compareArray.forEach((compareData, compareMarket) => {
+      // console.log(compareData);
+      temp += `${compareMarket}, Max: ${compareData.tradeMaxPercentage}%, Min: ${compareData.tradeMinPercentage}%|`;
+    });
+    tempTable.set(market, temp);
   });
+  // console.table([{ a: 1, b: 'Y' }, { a: 'Z', b: 2 }]);
+  console.table(tempTable);
 
 });
