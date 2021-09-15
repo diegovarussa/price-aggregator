@@ -67,6 +67,16 @@ export interface Ticker {
   time: number | null;
 }
 
+export interface Tick {
+  symbol: string;
+  market: string;
+  bid: number;
+  ask: number;
+  bidSize: number;
+  askSize: number;
+  time: number;
+}
+
 export interface Market {
   name: string;
   enabled: boolean;
@@ -143,13 +153,25 @@ export class FtxFeeder extends EventEmitter {
           }
           break;
         case ChannelType.ticker:
-          this.emit('tick', response);
+          if (response.type === ResponseType.update) {
+            let tick: Tick = {
+              symbol: response.market.split('-')[0].split('/')[0],
+              market: response.market,
+              bid: response.data.bid,
+              ask: response.data.ask,
+              bidSize: response.data.bidSize,
+              askSize: response.data.askSize,
+              time: response.data.time,
+            }
+            this.emit('tick', tick);
+          }
+
           break;
 
         default:
+          console.log(response);
           break;
       }
-      // console.log(response);
     });
 
     this._ws.on('close', (code: number, reason: string) => {
