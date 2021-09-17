@@ -1,17 +1,20 @@
 import { FtxFeeder, Tick, TradeSide } from "./feeder/FtxFeeder";
+var fs = require('fs');
 
-interface CompareTick extends Tick {
+export interface CompareTick extends Tick {
   // average: number;
   tradeSide: TradeSide;
   tradeSpread: number;
   tradeMaxSpread: number;
   tradeMinSpread: number;
+  tradeDiffSpread: number;
   tradeSize: number;
   tradePercentage: number;
   tradeMaxPercentage: number;
   tradeMinPercentage: number;
+  tradeDiffPercentage: number;
 }
-interface BaseTick extends Tick {
+export interface BaseTick extends Tick {
   // average: number;
   compareArray: Map<string, CompareTick>;
 }
@@ -19,20 +22,42 @@ interface BaseTick extends Tick {
 let ftxFeeder = new FtxFeeder();
 let lastTick = new Map<string, BaseTick>();
 
+function replacer(key: any, value: any[]) {
+  if(value instanceof Map) {
+    return {
+      dataType: 'Map',
+      value: Array.from(value.entries()),
+    };
+  } else {
+    return value;
+  }
+}
+
 // console.log(ftxFeeder.marketSymbols.size);
 ftxFeeder.on('ready', () => {
   // console.log(ftxFeeder.marketSymbols.size);
-  // ftxFeeder.marketSymbols.forEach((market, symbol) => {
-  //   console.log(symbol);
-  //   console.log(market);
-  // });
-  // console.log(ftxFeeder.marketSymbols.get('BTC'));
-  ftxFeeder.subscribeSymbol('BTC/USD');
-  ftxFeeder.subscribeSymbol('BTC-PERP');
-  ftxFeeder.marketSymbols.get('BTC')!.forEach(market => {
-    // console.log(market.name);
-    ftxFeeder.subscribeSymbol(market.name);
+  ftxFeeder.marketSymbols.forEach((market, symbol) => {
+    // console.log(symbol);
+    // console.log(market);
+    ftxFeeder.subscribeSymbol(`${symbol}/USD`);
+    market.forEach((individual) => {
+      // console.log(individual);
+      ftxFeeder.subscribeSymbol(individual.name);
+    });
   });
+  // console.log(ftxFeeder.marketSymbols.get('BTC'));
+  // ftxFeeder.subscribeSymbol('BTC/USD');
+  // ftxFeeder.subscribeSymbol('BTC-PERP');
+  // ftxFeeder.marketSymbols.get('BTC')!.forEach(market => {
+  //   // console.log(market.name);
+  //   ftxFeeder.subscribeSymbol(market.name);
+  // });
+
+  setInterval(() => {
+    // console.log(JSON.stringify(lastTick, replacer, 2));
+    let currentDay = (new Date()).toISOString().split('T')[0];
+    fs.writeFileSync(`./src/logs/${currentDay}.json`, JSON.stringify(lastTick, replacer, 2));
+  }, 60 * 1000);
 });
 
 ftxFeeder.on('tick', (tick: Tick) => {
@@ -65,18 +90,22 @@ ftxFeeder.on('tick', (tick: Tick) => {
         tradeSpread: 0,
         tradeMaxSpread: 0,
         tradeMinSpread: Infinity,
+        tradeDiffSpread: 0,
         tradeSize: 0,
         tradePercentage: 0,
         tradeMaxPercentage: 0,
         tradeMinPercentage: Infinity,
+        tradeDiffPercentage: 0,
       };
 
       if (current.compareArray.has(tick.market)) {
         let currentMarket: CompareTick = current.compareArray.get(tick.market)!;
         compareTick.tradeMaxSpread = currentMarket.tradeMaxSpread;
         compareTick.tradeMinSpread = currentMarket.tradeMinSpread;
+        compareTick.tradeDiffSpread = currentMarket.tradeDiffSpread;
         compareTick.tradeMaxPercentage = currentMarket.tradeMaxPercentage;
         compareTick.tradeMinPercentage = currentMarket.tradeMinPercentage;
+        compareTick.tradeDiffPercentage = currentMarket.tradeDiffPercentage;
       }
 
       if (tick.bid > current.ask) { // Need to short
@@ -120,6 +149,8 @@ ftxFeeder.on('tick', (tick: Tick) => {
           compareTick.tradeMinPercentage = buyPercentage;
         }
       }
+      compareTick.tradeDiffSpread = parseFloat((compareTick.tradeMaxSpread - compareTick.tradeMinSpread).toFixed(2));
+      compareTick.tradeDiffPercentage = parseFloat((compareTick.tradeMaxPercentage - compareTick.tradeMinPercentage).toFixed(2));
 
       baseTick.compareArray.set(current.market, compareTick);
 
@@ -133,11 +164,11 @@ ftxFeeder.on('tick', (tick: Tick) => {
     let temp = '';
     data.compareArray.forEach((compareData, compareMarket) => {
       // console.log(compareData);
-      temp += `${compareMarket}, Max: ${compareData.tradeMaxPercentage}%, Min: ${compareData.tradeMinPercentage}%|`;
+      temp += `${compareMarket}, Max: ${compareData.tradeMaxPercentage}%, Min: ${compareData.tradeMinPercentage}%, Diff: ${compareData.tradeDiffPercentage}%|`;
     });
     tempTable.set(market, temp);
   });
   // console.table([{ a: 1, b: 'Y' }, { a: 'Z', b: 2 }]);
-  console.table(tempTable);
+  // console.table(tempTable);
 
 });

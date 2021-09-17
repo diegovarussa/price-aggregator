@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { ClientRequest, IncomingMessage } from 'http';
 import EventEmitter from 'events';
 
+
 export enum ChannelType {
   orderbook = 'orderbook',
   orderbookGrouped = 'orderbookGrouped',
@@ -176,6 +177,24 @@ export class FtxFeeder extends EventEmitter {
 
     this._ws.on('close', (code: number, reason: string) => {
       console.error(`WebSocket closed: ${code} ${reason}`);
+      switch (code) {
+        case 1001: //byte array(b'CloudFlare WebSocket proxy restarting')
+          this._ws.terminate();
+          setTimeout(() => {
+            this.setUp();
+          }, 1000);
+          break;
+        case 1006:
+          this._ws.terminate();
+          setTimeout(() => {
+            this.setUp();
+          }, 1000);
+          break;
+
+        default:
+          break;
+      }
+
     })
 
     this._ws.on('error', (error: Error) => {
@@ -191,7 +210,7 @@ export class FtxFeeder extends EventEmitter {
     })
 
     this._ws.on('pong', (data: Buffer) => {
-      console.log(`WebSocket pong: ${data}`);
+      // console.log(`WebSocket pong: ${data}`);
     })
 
     this._ws.on('unexpected-response', (request: ClientRequest, response: IncomingMessage) => {
