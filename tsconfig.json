@@ -21,6 +21,8 @@
       "inlineSources": true,
       "experimentalDecorators": true,
       "strictPropertyInitialization": false,
+      "checkJs": false,
+      "allowJs": false,
       "typeRoots": ["./node_modules/@types"],
       "outDir": "./dist",
       "rootDir": "./src"

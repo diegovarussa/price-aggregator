@@ -2,7 +2,6 @@ import { FtxFeeder, Tick, TradeSide } from "./feeder/FtxFeeder";
 var fs = require('fs');
 
 export interface CompareTick extends Tick {
-  // average: number;
   tradeSide: TradeSide;
   tradeSpread: number;
   tradeMaxSpread: number;
@@ -15,7 +14,6 @@ export interface CompareTick extends Tick {
   tradeDiffPercentage: number;
 }
 export interface BaseTick extends Tick {
-  // average: number;
   compareArray: Map<string, CompareTick>;
 }
 
@@ -33,50 +31,29 @@ function replacer(key: any, value: any[]) {
   }
 }
 
-// console.log(ftxFeeder.marketSymbols.size);
 ftxFeeder.on('ready', () => {
-  // console.log(ftxFeeder.marketSymbols.size);
-  ftxFeeder.marketSymbols.forEach((market, symbol) => {
-    // console.log(symbol);
-    // console.log(market);
+  ftxFeeder.marketSymbols.forEach((marketGroup, symbol) => {
     ftxFeeder.subscribeSymbol(`${symbol}/USD`);
-    market.forEach((individual) => {
-      // console.log(individual);
-      ftxFeeder.subscribeSymbol(individual.name);
+    marketGroup.forEach((marketIndividual) => {
+      ftxFeeder.subscribeSymbol(marketIndividual.name);
     });
   });
-  // console.log(ftxFeeder.marketSymbols.get('BTC'));
-  // ftxFeeder.subscribeSymbol('BTC/USD');
-  // ftxFeeder.subscribeSymbol('BTC-PERP');
-  // ftxFeeder.marketSymbols.get('BTC')!.forEach(market => {
-  //   // console.log(market.name);
-  //   ftxFeeder.subscribeSymbol(market.name);
-  // });
 
-  setInterval(() => {
-    // console.log(JSON.stringify(lastTick, replacer, 2));
+  setInterval(() => { // save json every 1 minute and group gy day
     let currentDay = (new Date()).toISOString().split('T')[0];
     fs.writeFileSync(`./src/logs/${currentDay}.json`, JSON.stringify(lastTick, replacer, 2));
   }, 60 * 1000);
 });
 
 ftxFeeder.on('tick', (tick: Tick) => {
-  // console.log(`-----------------${tick.market}--------------------------`);
-  // console.log(tick);
-  // let tickAveragePrice = (tick.ask + tick.bid) / 2;
-  // console.log(`Average: ${tickAveragePrice}`);
 
   let baseTick: BaseTick = {
     ...tick,
-    // average: tickAveragePrice,
     compareArray: new Map<string, CompareTick>()
   };
 
   lastTick.forEach((current: BaseTick, market: string) => {
     if (tick.symbol === current.symbol && tick.market !== current.market) {
-      // console.log(data);
-      // let averagePrice = (data.ask + data.bid) / 2;
-      // console.log(`Average: ${averagePrice}`);
 
       let compareTick: CompareTick = {
         symbol: current.symbol,
@@ -153,22 +130,18 @@ ftxFeeder.on('tick', (tick: Tick) => {
       compareTick.tradeDiffPercentage = parseFloat((compareTick.tradeMaxPercentage - compareTick.tradeMinPercentage).toFixed(2));
 
       baseTick.compareArray.set(current.market, compareTick);
-
     }
   });
+
   lastTick.set(tick.market, baseTick);
-  // console.log(lastTick);
-  let tempTable = new Map<string, string>();
-  lastTick.forEach((data, market) => {
-    // console.log(data);
-    let temp = '';
-    data.compareArray.forEach((compareData, compareMarket) => {
-      // console.log(compareData);
-      temp += `${compareMarket}, Max: ${compareData.tradeMaxPercentage}%, Min: ${compareData.tradeMinPercentage}%, Diff: ${compareData.tradeDiffPercentage}%|`;
-    });
-    tempTable.set(market, temp);
-  });
-  // console.table([{ a: 1, b: 'Y' }, { a: 'Z', b: 2 }]);
-  // console.table(tempTable);
+
+  // let tempTable = new Map<string, string>();
+  // lastTick.forEach((current: BaseTick, market: string) => {
+  //   let temp = '';
+  //   current.compareArray.forEach((compareData, compareMarket) => {
+  //     temp += `${compareMarket}, Max: ${compareData.tradeMaxPercentage}%, Min: ${compareData.tradeMinPercentage}%, Diff: ${compareData.tradeDiffPercentage}%|`;
+  //   });
+  //   tempTable.set(market, temp);
+  // });
 
 });

@@ -4,4 +4,3 @@ node dist/index.js
 ```
 
 #TODO
-Refactor the code
