@@ -2,15 +2,14 @@ import WebSocket from 'ws';
 import { ClientRequest, IncomingMessage } from 'http';
 import EventEmitter from 'events';
 import axios from 'axios';
-import { IFeeder } from './IFeeder';
+import { IFeeder, MarketMode, Tick } from './IFeeder';
 
 export class BinanceFeeder extends EventEmitter implements IFeeder {
-
   private _apiUrl = 'https://api.binance.com/api/v3';
   private _webSocketUrl = 'wss://stream.binance.com:9443/ws';
   private _ws: WebSocket;
 
-  public mode: string;
+  public mode: MarketMode = MarketMode.spot;
   public marketSymbols: string[] = [];
 
   constructor(mode: string = 'spot') {
@@ -19,9 +18,8 @@ export class BinanceFeeder extends EventEmitter implements IFeeder {
     if (mode === 'future') {
       this._apiUrl = 'https://fapi.binance.com/fapi/v1';
       this._webSocketUrl = 'wss://fstream.binance.com/ws';
+      this.mode = MarketMode.future;
     }
-
-    this.mode = mode.toUpperCase();
   }
 
   async initMarketInfo() {
@@ -41,8 +39,20 @@ export class BinanceFeeder extends EventEmitter implements IFeeder {
     });
 
     this._ws.on('message', (data: WebSocket.Data) => {
-      // if(data.toString().includes('_'))
-      console.log(data.toString());
+      let json = JSON.parse(data.toString());
+
+      if (json.s !== undefined) {
+        let tick: Tick = {
+          broker: this.constructor.name,
+          mode: this.mode,
+          symbol: json.s,
+          bid: json.b,
+          bidSize: json.B,
+          ask: json.a,
+          askSize: json.A
+        }
+        this.emit('tick', tick)
+      };
     });
 
     this._ws.on('close', (code: number, reason: string) => {
@@ -89,12 +99,13 @@ export class BinanceFeeder extends EventEmitter implements IFeeder {
     })
   }
 
-  stop() {
+  stopWebSocket() {
     this._ws.terminate();
   }
 
   subscribeSymbol(symbol: string) {
     symbol = symbol.toLowerCase();
+
     this._ws.send(JSON.stringify({
       "method": "SUBSCRIBE",
       "params":
@@ -104,6 +115,8 @@ export class BinanceFeeder extends EventEmitter implements IFeeder {
         ],
       "id": Date.now()
     }));
+
+    console.log(`[${this.constructor.name}] (${this.mode}) Subscribed to: ${symbol}`);
   }
 
 }
